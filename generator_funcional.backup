@@ -1,0 +1,509 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Módulo core para la generación de gafetes PDF.
+Reutiliza las funciones de generación del código original.
+"""
+
+import os
+import io
+import logging
+from typing import Dict, List, Optional, Tuple
+from pypdf import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.utils import ImageReader
+from PIL import Image
+from utils import sanitizar_nombre_archivo
+
+logger = logging.getLogger(__name__)
+
+ANCHO_PAGINA = 281 * mm
+ALTO_PAGINA = 453 * mm
+TAMANO_PAGINA_PERSONALIZADO = (ANCHO_PAGINA, ALTO_PAGINA)
+
+ANCHO_PUNTOS = 796.5
+ALTO_PUNTOS = 1283.5
+
+POS = {
+    "frente": {
+        "nombre": (320, 880, 65),
+        "apellido": (320, 800, 65),
+        "puesto": (480, 630, 32),
+        "oficina": (100, 800, 70),
+        "qr_1": (500, 960, 150),
+    },
+    "reverso": {
+        "mesa": (315, 1121, 22),
+        "paseo": (150, 1055, 22),
+    },
+    "frente_acompanante": {
+        "nombre_titular": (320, 950, 40),
+        "apellido_titular": (320, 900, 40),
+        "nombre_acompanante": (320, 750, 40),
+        "apellido_acompanante": (320, 700, 40),
+        "puesto": (480, 630, 32),
+        "oficina": (100, 800, 70),
+        "qr_titular": (500, 960, 120),
+        "qr_acompanante": (500, 960, 120),
+    }
+}
+
+FONT_PATH = "C:/Windows/Fonts/arial.ttf"
+
+MESAS_VALIDAS = [
+    "Valuación",
+    "Grúas",
+    "Q Salud",
+    "Proyectos estratégicos",
+    "Productos y Tarifas",
+    "Verificaciones"
+]
+
+PASEOS_VALIDOS = [
+    "Paseo por el Centro histórico",
+    "Tour Museando Ando",
+    "Vamos Pa'l Mercado",
+    "Tour Colores de México"
+]
+
+
+def obtener_dimensiones_pdf(archivo_pdf: str) -> Tuple[float, float]:
+    """Obtiene las dimensiones reales de un archivo PDF."""
+    try:
+        reader = PdfReader(archivo_pdf)
+        page = reader.pages[0]
+        mediabox = page.mediabox
+        ancho = float(mediabox.width)
+        alto = float(mediabox.height)
+        logger.debug(f"Dimensiones detectadas del PDF {archivo_pdf}: {ancho:.1f} x {alto:.1f} puntos")
+        return ancho, alto
+    except Exception as e:
+        logger.error(f"Error obteniendo dimensiones del PDF: {e}")
+        return ANCHO_PUNTOS, ALTO_PUNTOS
+
+
+def registrar_fuente():
+    """Registra la fuente Arial para Windows."""
+    try:
+        if os.path.exists(FONT_PATH):
+            pdfmetrics.registerFont(TTFont('ArialFont', FONT_PATH))
+            logger.debug("Fuente Arial registrada correctamente")
+            return 'ArialFont'
+        else:
+            logger.debug(f"Fuente no encontrada en {FONT_PATH}, usando Helvetica")
+            return 'Helvetica-Bold'
+    except Exception as e:
+        logger.debug(f"Error registrando fuente: {e}, usando Helvetica")
+        return 'Helvetica-Bold'
+
+
+def validar_coordenadas(x: float, y: float, pagesize: tuple = None) -> tuple:
+    """Valida y ajusta las coordenadas para que estén dentro de los límites."""
+    if pagesize is None:
+        pagesize = (ANCHO_PUNTOS, ALTO_PUNTOS)
+    
+    max_x, max_y = pagesize
+    
+    if x < 0:
+        x = 10
+    elif x > max_x:
+        x = max_x - 10
+    
+    if y < 0:
+        y = 10
+    elif y > max_y:
+        y = max_y - 10
+    
+    return x, y
+
+
+def agregar_contenido_frente(pdf_canvas: canvas.Canvas, nombre: str, apellido: str,
+                             oficina: str, puesto: str, qr_image=None, 
+                             acompanante: bool = False, acompanante_info: Optional[Dict] = None):
+    """Agrega el contenido al frente del gafete."""
+    
+    pagesize = pdf_canvas._pagesize if hasattr(pdf_canvas, '_pagesize') else (ANCHO_PUNTOS, ALTO_PUNTOS)
+    ancho, alto = pagesize
+    
+    font_name = registrar_fuente()
+    
+    if acompanante and acompanante_info:
+        pos = POS["frente_acompanante"]
+        
+        pdf_canvas.setFont(font_name, pos["nombre_titular"][2])
+        x_val, y_val = validar_coordenadas(pos["nombre_titular"][0], pos["nombre_titular"][1], pagesize)
+        pdf_canvas.drawString(x_val, y_val, nombre)
+        
+        pdf_canvas.setFont(font_name, pos["apellido_titular"][2])
+        x_val, y_val = validar_coordenadas(pos["apellido_titular"][0], pos["apellido_titular"][1], pagesize)
+        pdf_canvas.drawString(x_val, y_val, apellido)
+        
+        if acompanante_info.get("nombre"):
+            pdf_canvas.setFont(font_name, pos["nombre_acompanante"][2])
+            x_val, y_val = validar_coordenadas(pos["nombre_acompanante"][0], pos["nombre_acompanante"][1], pagesize)
+            pdf_canvas.drawString(x_val, y_val, acompanante_info["nombre"])
+        
+        if acompanante_info.get("apellido"):
+            pdf_canvas.setFont(font_name, pos["apellido_acompanante"][2])
+            x_val, y_val = validar_coordenadas(pos["apellido_acompanante"][0], pos["apellido_acompanante"][1], pagesize)
+            pdf_canvas.drawString(x_val, y_val, acompanante_info["apellido"])
+        
+        if qr_image:
+            x, y, size = pos["qr_titular"]
+            x_val, y_val = validar_coordenadas(x, y, pagesize)
+            pdf_canvas.drawImage(ImageReader(qr_image), x_val, y_val - size, width=size, height=size)
+        
+        if acompanante_info and acompanante_info.get("qr_image"):
+            x, y, size = pos["qr_acompanante"]
+            x_val, y_val = validar_coordenadas(x, y, pagesize)
+            pdf_canvas.drawImage(ImageReader(acompanante_info["qr_image"]), 
+                                x_val, y_val - size, width=size, height=size)
+        
+        pdf_canvas.setFont(font_name, pos["puesto"][2])
+        x_val, y_val = validar_coordenadas(pos["puesto"][0], pos["puesto"][1], pagesize)
+        pdf_canvas.drawString(x_val, y_val, "")
+        
+    else:
+        pos = POS["frente"]
+        
+        pdf_canvas.setFont(font_name, pos["nombre"][2])
+        x_val, y_val = validar_coordenadas(pos["nombre"][0], pos["nombre"][1], pagesize)
+        pdf_canvas.drawString(x_val, y_val, nombre)
+        
+        pdf_canvas.setFont(font_name, pos["apellido"][2])
+        x_val, y_val = validar_coordenadas(pos["apellido"][0], pos["apellido"][1], pagesize)
+        pdf_canvas.drawString(x_val, y_val, apellido)
+        
+        pdf_canvas.setFont(font_name, pos["puesto"][2])
+        x_val, y_val = validar_coordenadas(pos["puesto"][0], pos["puesto"][1], pagesize)
+        pdf_canvas.drawString(x_val, y_val, puesto[:50])
+        
+        if qr_image:
+            x, y, size = pos["qr_1"]
+            x_val, y_val = validar_coordenadas(x, y, pagesize)
+            pdf_canvas.drawImage(ImageReader(qr_image), x_val, y_val - size, width=size, height=size)
+    
+    if oficina:
+        pdf_canvas.saveState()
+        pos_oficina = pos.get("oficina", POS["frente"]["oficina"])
+        x_val, y_val = validar_coordenadas(pos_oficina[0], pos_oficina[1], pagesize)
+        pdf_canvas.translate(x_val, y_val)
+        pdf_canvas.rotate(90)
+        pdf_canvas.setFont(font_name, pos_oficina[2])
+        pdf_canvas.drawString(0, 0, oficina[:30])
+        pdf_canvas.restoreState()
+
+
+def agregar_contenido_reverso(pdf_canvas: canvas.Canvas, mesa: str, paseo: str, font_name: str):
+    """Agrega el contenido al reverso del gafete."""
+    
+    pagesize = pdf_canvas._pagesize if hasattr(pdf_canvas, '_pagesize') else (ANCHO_PUNTOS, ALTO_PUNTOS)
+    pos = POS["reverso"]
+    
+    pdf_canvas.setFont(font_name, pos["mesa"][2])
+    x_val, y_val = validar_coordenadas(pos["mesa"][0], pos["mesa"][1], pagesize)
+    pdf_canvas.drawString(x_val, y_val, mesa)
+    
+    pdf_canvas.setFont(font_name, pos["paseo"][2])
+    x_val, y_val = validar_coordenadas(pos["paseo"][0], pos["paseo"][1], pagesize)
+    pdf_canvas.drawString(x_val, y_val, paseo)
+
+
+def generar_frente(entry: Dict, qr_bytes: io.BytesIO, qr_conyugue_bytes: Optional[io.BytesIO] = None) -> bytes:
+    """
+    Genera la página frontal del gafete.
+    
+    Args:
+        entry: Diccionario con los datos del asistente
+        qr_bytes: BytesIO con la imagen QR del titular
+        qr_conyugue_bytes: BytesIO con la imagen QR del acompañante (opcional)
+        
+    Returns:
+        Bytes del PDF generado
+    """
+    font_name = registrar_fuente()
+    
+    template_path = "template_frente.pdf"
+    if not os.path.exists(template_path):
+        raise FileNotFoundError(f"Plantilla no encontrada: {template_path}")
+    
+    ancho_real, alto_real = obtener_dimensiones_pdf(template_path)
+    
+    template_reader = PdfReader(template_path)
+    template_page = template_reader.pages[0]
+    
+    packet = io.BytesIO()
+    temp_canvas = canvas.Canvas(packet, pagesize=(ancho_real, alto_real))
+    
+    acompanante_info = None
+    if entry.get("LLevaConyugue") and qr_conyugue_bytes:
+        acompanante_info = {
+            "nombre": entry.get("PrimerNombreConyugue", ""),
+            "apellido": entry.get("PrimerApellidoConyugue", ""),
+            "qr_image": qr_conyugue_bytes
+        }
+    
+    agregar_contenido_frente(
+        temp_canvas,
+        entry.get("PrimerNombre", ""),
+        entry.get("PrimerApellido", ""),
+        entry.get("Oficina", ""),
+        entry.get("Puesto", ""),
+        qr_bytes,
+        bool(acompanante_info),
+        acompanante_info
+    )
+    
+    temp_canvas.save()
+    packet.seek(0)
+    
+    new_pdf = PdfReader(packet)
+    new_page = new_pdf.pages[0]
+    
+    template_page.merge_page(new_page)
+    
+    output = PdfWriter()
+    output.add_page(template_page)
+    
+    output_stream = io.BytesIO()
+    output.write(output_stream)
+    output_stream.seek(0)
+    
+    return output_stream.getvalue()
+
+
+def generar_reverso(mesa: str, paseo: str) -> bytes:
+    """
+    Genera la página reversa del gafete.
+    
+    Args:
+        mesa: Mesa asignada
+        paseo: Paseo/tour asignado
+        
+    Returns:
+        Bytes del PDF generado
+    """
+    if mesa and mesa not in MESAS_VALIDAS:
+        logger.warning(f"Mesa inválida: {mesa}. Usando valor por defecto.")
+        mesa = MESAS_VALIDAS[0]
+    
+    if paseo and paseo not in PASEOS_VALIDOS:
+        logger.warning(f"Paseo inválido: {paseo}. Usando valor por defecto.")
+        paseo = PASEOS_VALIDOS[0]
+    
+    font_name = registrar_fuente()
+    
+    template_path = "template_reverso.pdf"
+    if not os.path.exists(template_path):
+        raise FileNotFoundError(f"Plantilla no encontrada: {template_path}")
+    
+    ancho_real, alto_real = obtener_dimensiones_pdf(template_path)
+    
+    template_reader = PdfReader(template_path)
+    template_page = template_reader.pages[0]
+    
+    packet = io.BytesIO()
+    temp_canvas = canvas.Canvas(packet, pagesize=(ancho_real, alto_real))
+    
+    agregar_contenido_reverso(temp_canvas, mesa or "", paseo or "", font_name)
+    
+    temp_canvas.save()
+    packet.seek(0)
+    
+    new_pdf = PdfReader(packet)
+    new_page = new_pdf.pages[0]
+    
+    template_page.merge_page(new_page)
+    
+    output = PdfWriter()
+    output.add_page(template_page)
+    
+    output_stream = io.BytesIO()
+    output.write(output_stream)
+    output_stream.seek(0)
+    
+    return output_stream.getvalue()
+
+
+def generate_badge(
+    entry: Dict,
+    qr_bytes: io.BytesIO,
+    qr_conyugue_bytes: Optional[io.BytesIO] = None,
+    output_dir: str = "gafetes",
+    debug: bool = False
+) -> List[str]:
+    """
+    Genera gafete(s) completo(s) para un asistente.
+    
+    Args:
+        entry: Diccionario con los datos del asistente
+        qr_bytes: BytesIO con la imagen QR del titular
+        qr_conyugue_bytes: BytesIO con la imagen QR del acompañante (opcional)
+        output_dir: Directorio de salida
+        debug: Si generar PDFs de debug
+        
+    Returns:
+        Lista de paths de archivos generados
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    generated_files = []
+    
+    nombre = entry.get("PrimerNombre", "")
+    apellido = entry.get("PrimerApellido", "")
+    puesto = entry.get("Puesto", "")
+    oficina = entry.get("Oficina", "")
+    mesa = entry.get("Mesa", "")
+    tour = entry.get("Tour", "")
+    lleva_conyugue = entry.get("LLevaConyugue", False)
+    
+    logger.info(f"Generando gafete para {nombre} {apellido}")
+    
+    try:
+        frente_bytes = generar_frente(entry, qr_bytes, None)
+        reverso_bytes = generar_reverso(mesa, tour)
+        
+        frente_reader = PdfReader(io.BytesIO(frente_bytes))
+        reverso_reader = PdfReader(io.BytesIO(reverso_bytes))
+        
+        output = PdfWriter()
+        output.add_page(frente_reader.pages[0])
+        output.add_page(reverso_reader.pages[0])
+        
+        nombre_archivo = f"{sanitizar_nombre_archivo(apellido)}_{sanitizar_nombre_archivo(nombre)}.pdf"
+        filepath = os.path.join(output_dir, nombre_archivo)
+        
+        with open(filepath, 'wb') as f:
+            output.write(f)
+        
+        logger.info(f"✓ Gafete titular guardado: {filepath}")
+        generated_files.append(filepath)
+        
+    except Exception as e:
+        logger.error(f"Error generando gafete titular para {nombre} {apellido}: {e}")
+        raise
+    
+    if lleva_conyugue and qr_conyugue_bytes:
+        nombre_conyugue = entry.get("PrimerNombreConyugue", "")
+        apellido_conyugue = entry.get("PrimerApellidoConyugue", "")
+        
+        if nombre_conyugue and apellido_conyugue:
+            logger.info(f"Generando gafete acompañante para {nombre_conyugue} {apellido_conyugue}")
+            
+            try:
+                entry_acompanante = {
+                    "PrimerNombre": nombre_conyugue,
+                    "PrimerApellido": apellido_conyugue,
+                    "Puesto": "Acompañante",
+                    "Oficina": oficina,
+                    "Mesa": mesa,
+                    "Tour": tour,
+                    "QR": entry.get("QR_Conyugue", ""),
+                    "LLevaConyugue": False
+                }
+                
+                frente_bytes = generar_frente(entry_acompanante, qr_conyugue_bytes, None)
+                reverso_bytes = generar_reverso(mesa, tour)
+                
+                frente_reader = PdfReader(io.BytesIO(frente_bytes))
+                reverso_reader = PdfReader(io.BytesIO(reverso_bytes))
+                
+                output = PdfWriter()
+                output.add_page(frente_reader.pages[0])
+                output.add_page(reverso_reader.pages[0])
+                
+                nombre_archivo = f"{sanitizar_nombre_archivo(apellido_conyugue)}_{sanitizar_nombre_archivo(nombre_conyugue)}_acompanante.pdf"
+                filepath = os.path.join(output_dir, nombre_archivo)
+                
+                with open(filepath, 'wb') as f:
+                    output.write(f)
+                
+                logger.info(f"✓ Gafete acompañante guardado: {filepath}")
+                generated_files.append(filepath)
+                
+            except Exception as e:
+                logger.error(f"Error generando gafete acompañante para {nombre_conyugue} {apellido_conyugue}: {e}")
+    
+    if debug and generated_files:
+        generate_debug_pdfs(output_dir)
+    
+    return generated_files
+
+
+def generate_debug_pdfs(output_dir: str = "."):
+    """
+    Genera PDFs de debug con cuadrícula para visualizar posiciones.
+    
+    Args:
+        output_dir: Directorio donde guardar los PDFs de debug
+    """
+    logger.info("Generando PDFs de debug...")
+    
+    dimensiones = TAMANO_PAGINA_PERSONALIZADO
+    
+    if os.path.exists("template_frente.pdf"):
+        ancho, alto = obtener_dimensiones_pdf("template_frente.pdf")
+        dimensiones = (ancho, alto)
+    
+    debug_canvas_frente = canvas.Canvas(
+        os.path.join(output_dir, "debug_frente.pdf"),
+        pagesize=dimensiones
+    )
+    _dibujar_debug(debug_canvas_frente, dimensiones, "frente")
+    debug_canvas_frente.save()
+    
+    debug_canvas_reverso = canvas.Canvas(
+        os.path.join(output_dir, "debug_reverso.pdf"),
+        pagesize=dimensiones
+    )
+    _dibujar_debug(debug_canvas_reverso, dimensiones, "reverso")
+    debug_canvas_reverso.save()
+    
+    logger.info("PDFs de debug generados: debug_frente.pdf, debug_reverso.pdf")
+
+
+def _dibujar_debug(pdf_canvas: canvas.Canvas, pagesize: tuple, lado: str):
+    """Dibuja elementos de debug en el canvas."""
+    ancho, alto = pagesize
+    
+    pdf_canvas.setStrokeColorRGB(1, 0, 0)
+    pdf_canvas.setLineWidth(2)
+    pdf_canvas.rect(0, 0, ancho, alto)
+    
+    pdf_canvas.setStrokeColorRGB(0.8, 0.8, 0.8)
+    pdf_canvas.setLineWidth(0.5)
+    
+    for x in range(0, int(ancho) + 1, 100):
+        pdf_canvas.line(x, 0, x, alto)
+        pdf_canvas.drawString(x + 2, 10, str(x))
+    
+    for y in range(0, int(alto) + 1, 100):
+        pdf_canvas.line(0, y, ancho, y)
+        pdf_canvas.drawString(10, y + 2, str(y))
+    
+    if lado in POS:
+        pdf_canvas.setFillColorRGB(0, 0.5, 0)
+        pdf_canvas.setFont('Helvetica', 10)
+        
+        for elemento, (x_pos, y_pos, _) in POS[lado].items():
+            x_val, y_val = validar_coordenadas(x_pos, y_pos, pagesize)
+            pdf_canvas.circle(x_val, y_val, 5, fill=1)
+            pdf_canvas.drawString(x_val + 10, y_val, f"{lado}.{elemento}")
+    
+    pdf_canvas.setFillColorRGB(1, 0, 0)
+    pdf_canvas.setFont('Helvetica-Bold', 14)
+    pdf_canvas.drawString(10, alto - 30, f"Debug {lado}: {ancho:.1f} x {alto:.1f} puntos")
+
+
+if __name__ == "__main__":
+    print("Módulo generator.py - Funciones core de generación de gafetes")
+    print("Este módulo debe ser importado por cli.py")
+    
+    templates = ["template_frente.pdf", "template_reverso.pdf"]
+    for template in templates:
+        if os.path.exists(template):
+            print(f"✓ {template} encontrado")
+        else:
+            print(f"✗ {template} NO encontrado")
