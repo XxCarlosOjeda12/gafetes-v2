@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-SOLUCIÓN DEFINITIVA - Distribuye gafetes sin usar merge_page()
+SOLUCIÓN DEFINITIVA - Distribuye gafetes 
 Convierte cada gafete a imagen y los coloca con reportlab
-GARANTIZA: Sin superposiciones, sin QR fuera de lugar
+
 """
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
@@ -171,7 +171,7 @@ def distribuir_gafetes_robusto(lista_gafetes, archivo_salida,
     Distribuye gafetes usando método robusto sin merge_page.
     Cada gafete se convierte a imagen y se coloca con reportlab.
     """
-    print(f"=== DISTRIBUCIÓN ROBUSTA (SIN MERGE_PAGE) ===")
+
     print(f"Tamaño de hoja: {ancho_hoja} x {alto_hoja} cm")
     print(f"Tamaño de gafete: {ancho_gafete} x {alto_gafete} cm")
     print(f"Resolución: {dpi} DPI")
@@ -182,7 +182,7 @@ def distribuir_gafetes_robusto(lista_gafetes, archivo_salida,
         print("✓ pdf2image disponible (mejor calidad)")
     except ImportError:
         print("⚠️  pdf2image no disponible (usando método alternativo)")
-        print("   Para mejor calidad: pip install pdf2image pillow --break-system-packages")
+      
     
     # Calcular distribución
     dist = calcular_distribucion(ancho_hoja, alto_hoja, ancho_gafete, alto_gafete)
@@ -287,7 +287,7 @@ def distribuir_gafetes_robusto(lista_gafetes, archivo_salida,
     print(f"\n✓ PDF generado exitosamente: {archivo_salida}")
     print(f"  Total de páginas: {len(writer.pages)}")
     print(f"  Hojas para imprimir: {num_hojas} (frente y vuelta)")
-    print(f"\n🎉 GARANTIZADO: Sin superposiciones, sin QR fuera de lugar")
+
 
 def main():
     if len(sys.argv) < 2:
@@ -296,7 +296,6 @@ def main():
         print("  python distribuir_final.py lista.json gafetes.pdf")
         print("  python distribuir_final.py lista.json gafetes.pdf --dpi 300  (más calidad)")
         print("\nNOTA: Este script NO usa merge_page() y convierte cada gafete a imagen.")
-        print("      Es más lento pero 100% confiable sin superposiciones.")
         sys.exit(1)
     
     archivo_lista = sys.argv[1]

@@ -33,3 +33,6 @@ python generar_lista.py ./gafetes_directores_escala gafetes_directores_escala.js
 Usa el JSON de entrada (que contiene los pares de archivos en orden de ejecución) para crear el PDF final:
 
 python distribuir_final.py gafetes_directores_escala.json gafetes_directores_29oct.pdf --dpi 300
+
+
+pip install pdf2image pillow --break-system-packages
