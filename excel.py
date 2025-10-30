@@ -171,7 +171,7 @@ def read_attendees(excel_path: str, sheet_name: Optional[str] = None) -> List[Di
         
         attendees = []
         invalid_rows = []
-        
+        ##TODO RBM
         for idx, row in df.iterrows():
             entry = {
                 "Puesto": str(row["Puesto"]) if not pd.isna(row["Puesto"]) else "",
@@ -184,7 +184,11 @@ def read_attendees(excel_path: str, sheet_name: Optional[str] = None) -> List[Di
                 "PrimerNombreConyugue": str(row["PrimerNombreConyugue"]) if not pd.isna(row["PrimerNombreConyugue"]) else "",
                 "PrimerApellidoConyugue": str(row["PrimerApellidoConyugue"]) if not pd.isna(row["PrimerApellidoConyugue"]) else "",
                 "QR": str(row["QR"]) if not pd.isna(row["QR"]) else "",
-                "QR_Conyugue": str(row["QR_Conyugue"]) if not pd.isna(row["QR_Conyugue"]) else ""
+                "QR_Conyugue": str(row["QR_Conyugue"]) if not pd.isna(row["QR_Conyugue"]) else "",
+                "Numeracion": str(row["Numeracion"]) if "Numeracion" in row and not pd.isna(row["Numeracion"]) else "",
+                #"Id_Usuario": str(row["Id_Usuario"]) if not pd.isna(row["Id_Usuario"]) else "",
+                #"Id_Conyugue": str(row["Id_Conyugue"]) if not pd.isna(row["Id_Conyugue"]) else "",
+                #"Email": str(row["Email"]) if not pd.isna(row["Email"]) else ""
             }
             
             error_msg = validate_row(entry, idx)

@@ -390,7 +390,11 @@ def generate_badge(entry: Dict, qr_image: Optional[io.BytesIO],
     mesa = entry.get("Mesa", "").strip() or "Sin mesa asignada"   
     paseo = entry.get("Tour", "").strip() or "Sin tour asignado"  
     lleva_conyugue = entry.get("LLevaConyugue", False)
-    
+    Numeracion = entry.get("Numeracion", "")
+    #Id_Usuario = entry.get("Id_Usuario", "")
+    #Id_Conyugue = entry.get("Id_Conyugue", "")
+    #Email = entry.get("Email", "")
+
     logger.info(f"Generando gafete para {nombre} {apellido}")
     
     frente_bytes = generar_frente_individual(nombre, apellido, oficina, puesto, qr_image)
@@ -402,10 +406,10 @@ def generate_badge(entry: Dict, qr_image: Optional[io.BytesIO],
     output = PdfWriter()
     output.add_page(frente_reader.pages[0])
     output.add_page(reverso_reader.pages[0])
-    
-    nombre_archivo = f"{sanitizar_nombre_archivo(apellido)}_{sanitizar_nombre_archivo(nombre)}.pdf"
+     ##TODO RBM add id de usuario
+    nombre_archivo = f"{Numeracion}. {sanitizar_nombre_archivo(apellido)}_{sanitizar_nombre_archivo(nombre)}.pdf"
     filepath = os.path.join(output_dir, nombre_archivo)
-    
+     
     with open(filepath, 'wb') as f:
         output.write(f)
     
@@ -435,8 +439,8 @@ def generate_badge(entry: Dict, qr_image: Optional[io.BytesIO],
         output = PdfWriter()
         output.add_page(frente_reader.pages[0])
         output.add_page(reverso_reader.pages[0])
-        
-        nombre_archivo = f"{sanitizar_nombre_archivo(apellido_conyugue)}_{sanitizar_nombre_archivo(nombre_conyugue)}_acompanante.pdf"
+        ##TODO RBM add id de conyugue
+        nombre_archivo = f"{Numeracion}.{"1"}. {sanitizar_nombre_archivo(apellido_conyugue)}_{sanitizar_nombre_archivo(nombre_conyugue)}_acompanante.pdf"
         filepath = os.path.join(output_dir, nombre_archivo)
         
         with open(filepath, 'wb') as f:

@@ -362,7 +362,7 @@ def main():
         
         if not args.dry_run and stats.filas_procesadas > 0:
             resumen_file = stats.guardar_resumen(
-                os.path.join(args.output_dir, "resumen_generacion.txt")
+                os.path.join(args.output_dir, "resumen_generacion_29oct.txt")
             )
             print(f"\n Resumen guardado en: {resumen_file}")
         
