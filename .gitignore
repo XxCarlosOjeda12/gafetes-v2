@@ -79,3 +79,8 @@ env-win/**
 qrs_bakcup/**
 test.txt
 generacion.log
+
+distribuir_final.py.bak
+distribuir_final_reversoinvertido.py
+gafetes_directores_30oct_all-espejo.pdf
+gafetes_directores_escala_29oct-parte-espejo.pdf

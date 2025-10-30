@@ -36,3 +36,5 @@ python distribuir_final.py gafetes_directores_escala.json gafetes_directores_29o
 
 
 pip install pdf2image pillow --break-system-packages
+
+instalar poppler-25.07.0

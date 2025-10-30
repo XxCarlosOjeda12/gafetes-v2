@@ -2,7 +2,6 @@
 """
 SOLUCIÓN DEFINITIVA - Distribuye gafetes 
 Convierte cada gafete a imagen y los coloca con reportlab
-
 """
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
@@ -33,7 +32,7 @@ def calcular_distribucion(ancho_hoja_cm, alto_hoja_cm, ancho_gafete_cm, alto_gaf
     for fila in range(filas):
         for col in range(columnas):
             x = margen_x + (col * ancho_gafete_cm)
-            #y = margen_y + (fila * alto_gafete_cm)
+            # Orden de arriba hacia abajo
             y = margen_y + ((filas - 1 - fila) * alto_gafete_cm)
             posiciones.append((x, y))
     
@@ -43,8 +42,20 @@ def calcular_distribucion(ancho_hoja_cm, alto_hoja_cm, ancho_gafete_cm, alto_gaf
         'total': total,
         'posiciones': posiciones,
         'margen_x': margen_x,
-        'margen_y': margen_y
+        'margen_y': margen_y,
+        'ancho_hoja': ancho_hoja_cm,
+        'alto_hoja': alto_hoja_cm
     }
+
+def calcular_posicion_reverso(pos_x, pos_y, ancho_gafete, ancho_hoja, columnas):
+    """
+    Calcula la posición invertida para el reverso.
+    Esto asegura que al imprimir en duplex, cada frente coincida con su reverso.
+    """
+    # Invertir horizontalmente (espejo)
+    pos_x_reverso = ancho_hoja - pos_x - ancho_gafete
+    
+    return pos_x_reverso, pos_y
 
 def pdf_to_image_pil(pdf_path, dpi=300):
     """
@@ -169,7 +180,7 @@ def distribuir_gafetes_robusto(lista_gafetes, archivo_salida,
                                dpi=200):
     """
     Distribuye gafetes usando método robusto sin merge_page.
-    Cada gafete se convierte a imagen y se coloca con reportlab.
+    Cada gafete se convierte a imagen y se coloca con reportlab.    
     """
 
     print(f"Tamaño de hoja: {ancho_hoja} x {alto_hoja} cm")
@@ -226,7 +237,14 @@ def distribuir_gafetes_robusto(lista_gafetes, archivo_salida,
         for i, gafete in enumerate(gafetes_en_hoja):
             pos_x, pos_y = dist['posiciones'][i]
             
-            print(f"  Posición {i+1}/{len(gafetes_en_hoja)}: ({pos_x:.1f}, {pos_y:.1f}) cm")
+            # CALCULAR POSICIÓN INVERTIDA PARA EL REVERSO
+            pos_x_reverso, pos_y_reverso = calcular_posicion_reverso(
+                pos_x, pos_y, ancho_gafete, ancho_hoja, dist['columnas']
+            )
+            
+            print(f"  Posición {i+1}/{len(gafetes_en_hoja)}")
+            print(f"    Frente: ({pos_x:.1f}, {pos_y:.1f}) cm")
+            print(f"    Reverso: ({pos_x_reverso:.1f}, {pos_y_reverso:.1f}) cm")
             
             # Verificar archivos
             if not os.path.exists(gafete['frente']):
@@ -236,7 +254,7 @@ def distribuir_gafetes_robusto(lista_gafetes, archivo_salida,
                 print(f"    ⚠️  Falta reverso: {gafete['reverso']}")
                 continue
             
-            # Colocar frente
+            # Colocar frente (posición normal)
             print(f"    Procesando frente...", end='')
             if colocar_gafete_como_imagen(canvas_frente, gafete['frente'], 
                                          pos_x, pos_y, ancho_gafete, alto_gafete, dpi):
@@ -244,10 +262,10 @@ def distribuir_gafetes_robusto(lista_gafetes, archivo_salida,
             else:
                 print(" ✗")
             
-            # Colocar reverso
+            # Colocar reverso (posición invertida)
             print(f"    Procesando reverso...", end='')
             if colocar_gafete_como_imagen(canvas_reverso, gafete['reverso'], 
-                                         pos_x, pos_y, ancho_gafete, alto_gafete, dpi):
+                                         pos_x_reverso, pos_y_reverso, ancho_gafete, alto_gafete, dpi):
                 print(" ✓")
             else:
                 print(" ✗")
@@ -265,13 +283,26 @@ def distribuir_gafetes_robusto(lista_gafetes, archivo_salida,
     print("Combinando páginas...")
     writer = PdfWriter()
     
-    for temp_pdf in temp_pdfs:
-        try:
-            reader = PdfReader(temp_pdf)
-            for page in reader.pages:
-                writer.add_page(page)
-        except Exception as e:
-            print(f"  ⚠️  Error leyendo {temp_pdf}: {e}")
+    # Asegurar orden correcto: frente1, reverso1, frente2, reverso2, etc.
+    for i in range(num_hojas):
+        frente_idx = i * 2
+        reverso_idx = i * 2 + 1
+        
+        if frente_idx < len(temp_pdfs):
+            try:
+                reader = PdfReader(temp_pdfs[frente_idx])
+                for page in reader.pages:
+                    writer.add_page(page)
+            except Exception as e:
+                print(f"  ⚠️  Error leyendo frente {i+1}: {e}")
+        
+        if reverso_idx < len(temp_pdfs):
+            try:
+                reader = PdfReader(temp_pdfs[reverso_idx])
+                for page in reader.pages:
+                    writer.add_page(page)
+            except Exception as e:
+                print(f"  ⚠️  Error leyendo reverso {i+1}: {e}")
     
     # Guardar PDF final
     with open(archivo_salida, "wb") as f:
@@ -295,7 +326,7 @@ def main():
         print("\nEjemplo:")
         print("  python distribuir_final.py lista.json gafetes.pdf")
         print("  python distribuir_final.py lista.json gafetes.pdf --dpi 300  (más calidad)")
-        print("\nNOTA: Este script NO usa merge_page() y convierte cada gafete a imagen.")
+        print("\nNOTA: Este script CORRIGE POSICIONES PARA IMPRESIÓN DUPLEX")
         sys.exit(1)
     
     archivo_lista = sys.argv[1]
@@ -327,12 +358,13 @@ def main():
         distribuir_gafetes_robusto(lista_gafetes, archivo_salida, dpi=dpi)
         
         print("\n" + "="*70)
-        print("INSTRUCCIONES DE IMPRESIÓN:")
+        
         print("="*70)
-        print("1. Imprimir en modo 'Frente y vuelta' (duplex)")
+        print("1. Imprimir en modo 'Frente y vuelta' (duplex) por el lado LARGO")
         print("2. Tamaño de papel: 33 x 46.5 cm")
         print("3. Escala: 100% (sin ajustar)")
-        print("4. Las páginas están organizadas correctamente")
+        
+        print("5. Cada frente coincidirá exactamente con su reverso")
         print("="*70)
         
     except Exception as e:
